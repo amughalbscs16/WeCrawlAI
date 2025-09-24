@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Testing Agent MVP - Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #374151;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        textarea {
+            height: 200px;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+        .status.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+        .results {
+            margin-top: 20px;
+        }
+        .step {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+        .step-type {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
+        .api-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .api-status.online {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .api-status.offline {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body>
+    <div id="apiStatus" class="api-status offline">🔴 Backend Offline</div>
+
+    <div class="header">
+        <h1>🤖 AI Testing Agent MVP</h1>
+        <p>Natural Language Web Testing with Built-in Security Scanning</p>
+        <p><strong>Backend Status:</strong> <span id="backendStatus">Checking...</span></p>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>🎯 Test Scenario</h2>
+            <div class="input-group">
+                <label for="targetUrl">Target URL</label>
+                <input type="url" id="targetUrl" value="https://www.google.com" placeholder="https://example.com">
+            </div>
+            <div class="input-group">
+                <label for="scenario">Test Scenario (BDD Format)</label>
+                <textarea id="scenario" placeholder="Given I am on the homepage
+When I click the login button
+Then I should see the login form">Scenario: Google Search Test
+Given I am on the Google homepage
+When I search for "AI testing tools"
+And I click the search button
+Then I should see search results
+And the page should load successfully</textarea>
+            </div>
+            <button onclick="parseScenario()">🚀 Parse Scenario with AI</button>
+        </div>
+
+        <div class="card">
+            <h2>⚙️ Test Configuration</h2>
+            <div class="input-group">
+                <label for="browser">Browser</label>
+                <select id="browser">
+                    <option value="chromium">Chromium</option>
+                    <option value="firefox">Firefox</option>
+                    <option value="webkit">WebKit (Safari)</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>Options</label>
+                <div style="display: flex; gap: 15px; margin-top: 10px;">
+                    <label style="display: flex; align-items: center; font-weight: normal;">
+                        <input type="checkbox" id="headless" style="width: auto; margin-right: 5px;">
+                        Headless Mode
+                    </label>
+                    <label style="display: flex; align-items: center; font-weight: normal;">
+                        <input type="checkbox" id="security" checked style="width: auto; margin-right: 5px;">
+                        Security Testing
+                    </label>
+                    <label style="display: flex; align-items: center; font-weight: normal;">
+                        <input type="checkbox" id="screenshots" checked style="width: auto; margin-right: 5px;">
+                        Screenshots
+                    </label>
+                </div>
+            </div>
+            <button onclick="executeTest()">🎭 Execute Test</button>
+        </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div id="results" class="results"></div>
+
+    <div class="card" style="margin-top: 20px;">
+        <h2>📊 Quick API Tests</h2>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button onclick="testHealth()">🔍 Health Check</button>
+            <button onclick="testDetailedHealth()">📋 Detailed Health</button>
+            <button onclick="testAIModels()">🤖 AI Models</button>
+            <button onclick="testWebSocket()">🔌 WebSocket Test</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:4000/api';
+        let wsConnection = null;
+
+        // Check backend status on load
+        checkBackendStatus();
+
+        async function checkBackendStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                if (data.success) {
+                    updateApiStatus(true);
+                    document.getElementById('backendStatus').textContent = `✅ Online (${data.data.environment})`;
+                } else {
+                    updateApiStatus(false);
+                }
+            } catch (error) {
+                updateApiStatus(false);
+                document.getElementById('backendStatus').textContent = '❌ Offline';
+            }
+        }
+
+        function updateApiStatus(online) {
+            const status = document.getElementById('apiStatus');
+            if (online) {
+                status.className = 'api-status online';
+                status.textContent = '🟢 Backend Online';
+            } else {
+                status.className = 'api-status offline';
+                status.textContent = '🔴 Backend Offline';
+            }
+        }
+
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+
+        function hideStatus() {
+            document.getElementById('status').style.display = 'none';
+        }
+
+        async function parseScenario() {
+            const scenario = document.getElementById('scenario').value;
+
+            if (!scenario.trim()) {
+                showStatus('Please enter a test scenario', 'error');
+                return;
+            }
+
+            showStatus('🤖 Parsing scenario with AI...', 'info');
+
+            try {
+                const response = await fetch(`${API_BASE}/ai/parse-scenario`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ scenario })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus(`✅ Scenario parsed successfully! Found ${data.data.stepCount} steps.`, 'success');
+                    displayParsedSteps(data.data.parsedSteps);
+                } else {
+                    showStatus('❌ Failed to parse scenario', 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        function displayParsedSteps(steps) {
+            const results = document.getElementById('results');
+            results.innerHTML = '<h3>🔍 Parsed Test Steps</h3>';
+
+            steps.forEach((step, index) => {
+                const stepDiv = document.createElement('div');
+                stepDiv.className = 'step';
+                stepDiv.innerHTML = `
+                    <div class="step-type">${step.type} - ${step.action}</div>
+                    <strong>Step ${index + 1}:</strong> ${step.description}
+                    ${step.selector ? `<br><small>Selector: ${step.selector}</small>` : ''}
+                    ${step.value ? `<br><small>Value: ${step.value}</small>` : ''}
+                    ${step.expected ? `<br><small>Expected: ${step.expected}</small>` : ''}
+                `;
+                results.appendChild(stepDiv);
+            });
+        }
+
+        async function executeTest() {
+            const scenario = document.getElementById('scenario').value;
+            const targetUrl = document.getElementById('targetUrl').value;
+            const browser = document.getElementById('browser').value;
+            const headless = document.getElementById('headless').checked;
+            const security = document.getElementById('security').checked;
+            const screenshots = document.getElementById('screenshots').checked;
+
+            if (!scenario.trim()) {
+                showStatus('Please enter a test scenario', 'error');
+                return;
+            }
+
+            if (!targetUrl.trim()) {
+                showStatus('Please enter a target URL', 'error');
+                return;
+            }
+
+            showStatus('🎭 Starting test execution...', 'info');
+
+            try {
+                const response = await fetch(`${API_BASE}/tests/execute`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        scenario: scenario,
+                        url: targetUrl,
+                        options: {
+                            browser: browser,
+                            headless: headless,
+                            enableSecurity: security,
+                            enableScreenshots: screenshots,
+                            timeout: 30000,
+                            viewport: {
+                                width: 1280,
+                                height: 720
+                            }
+                        }
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus(`✅ Test execution started! ID: ${data.data.executionId}`, 'success');
+
+                    // Start polling for test status
+                    pollTestStatus(data.data.executionId);
+                } else {
+                    showStatus('❌ Failed to start test execution', 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function pollTestStatus(executionId) {
+            const maxPolls = 60; // 5 minutes with 5-second intervals
+            let pollCount = 0;
+
+            const poll = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/tests/execution/${executionId}/status`);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        const status = data.data;
+                        showStatus(`🔄 Test Status: ${status.status.toUpperCase()} - ${status.currentStep || 'Initializing'}`, 'info');
+
+                        if (status.status === 'completed' || status.status === 'failed' || status.status === 'stopped') {
+                            // Get final results
+                            await getTestResults(executionId);
+                            return;
+                        }
+
+                        // Continue polling if not finished
+                        if (pollCount < maxPolls) {
+                            pollCount++;
+                            setTimeout(poll, 5000); // Poll every 5 seconds
+                        } else {
+                            showStatus('⏰ Test execution timeout - please check manually', 'error');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    if (pollCount < maxPolls) {
+                        pollCount++;
+                        setTimeout(poll, 5000);
+                    }
+                }
+            };
+
+            setTimeout(poll, 2000); // Start polling after 2 seconds
+        }
+
+        async function getTestResults(executionId) {
+            try {
+                const response = await fetch(`${API_BASE}/tests/execution/${executionId}/results`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const results = data.data;
+                    displayTestResults(results);
+                    showStatus(`✅ Test completed! ${results.summary?.passed || 0} passed, ${results.summary?.failed || 0} failed`, 'success');
+                } else {
+                    showStatus('❌ Failed to get test results', 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error getting results: ${error.message}`, 'error');
+            }
+        }
+
+        function displayTestResults(results) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<h3>🎯 Test Results</h3>';
+
+            // Display execution summary
+            if (results.summary) {
+                const summaryDiv = document.createElement('div');
+                summaryDiv.className = 'step';
+                summaryDiv.innerHTML = `
+                    <div class="step-type">SUMMARY</div>
+                    <strong>Execution Summary:</strong><br>
+                    <small>Total Steps: ${results.summary.total || 0}</small><br>
+                    <small>Passed: ${results.summary.passed || 0}</small><br>
+                    <small>Failed: ${results.summary.failed || 0}</small><br>
+                    <small>Duration: ${results.summary.duration || 0}ms</small>
+                `;
+                resultsDiv.appendChild(summaryDiv);
+            }
+
+            // Display test steps
+            if (results.execution && results.execution.steps) {
+                results.execution.steps.forEach((step, index) => {
+                    const stepDiv = document.createElement('div');
+                    stepDiv.className = 'step';
+                    const statusIcon = step.status === 'passed' ? '✅' : step.status === 'failed' ? '❌' : '⏳';
+                    stepDiv.innerHTML = `
+                        <div class="step-type">${step.action.toUpperCase()} - ${step.status.toUpperCase()}</div>
+                        <strong>Step ${index + 1}:</strong> ${statusIcon} ${step.description}
+                        ${step.duration ? `<br><small>Duration: ${step.duration}ms</small>` : ''}
+                        ${step.error ? `<br><small style="color: #991b1b;">Error: ${step.error}</small>` : ''}
+                    `;
+                    resultsDiv.appendChild(stepDiv);
+                });
+            }
+
+            // Display security findings if any
+            if (results.execution && results.execution.securityFindings && results.execution.securityFindings.length > 0) {
+                const securityDiv = document.createElement('div');
+                securityDiv.className = 'step';
+                securityDiv.style.backgroundColor = '#fee2e2';
+                securityDiv.innerHTML = `
+                    <div class="step-type">SECURITY FINDINGS</div>
+                    <strong>⚠️ ${results.execution.securityFindings.length} Security Issue(s) Found</strong>
+                `;
+                resultsDiv.appendChild(securityDiv);
+
+                results.execution.securityFindings.forEach((finding, index) => {
+                    const findingDiv = document.createElement('div');
+                    findingDiv.className = 'step';
+                    findingDiv.style.backgroundColor = '#fef2f2';
+                    findingDiv.innerHTML = `
+                        <div class="step-type">${finding.severity.toUpperCase()} - ${finding.type.toUpperCase()}</div>
+                        <strong>Finding ${index + 1}:</strong> ${finding.title}<br>
+                        <small>${finding.description}</small><br>
+                        <small><strong>Remediation:</strong> ${finding.remediation}</small>
+                    `;
+                    resultsDiv.appendChild(findingDiv);
+                });
+            }
+        }
+
+        async function testHealth() {
+            showStatus('🔍 Testing health endpoint...', 'info');
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                showStatus(`✅ Health check successful! Uptime: ${Math.round(data.data.uptime)}s`, 'success');
+            } catch (error) {
+                showStatus(`❌ Health check failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testDetailedHealth() {
+            showStatus('📋 Testing detailed health endpoint...', 'info');
+            try {
+                const response = await fetch(`${API_BASE}/health/detailed`);
+                const data = await response.json();
+                showStatus(`✅ Detailed health check successful! Memory used: ${data.data.memory.used}MB`, 'success');
+            } catch (error) {
+                showStatus(`❌ Detailed health check failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testAIModels() {
+            showStatus('🤖 Testing AI models endpoint...', 'info');
+            try {
+                const response = await fetch(`${API_BASE}/ai/models`);
+                const data = await response.json();
+                const modelCount = data.data.models.reduce((sum, provider) => sum + provider.models.length, 0);
+                showStatus(`✅ AI models loaded! Found ${modelCount} models across ${data.data.models.length} providers`, 'success');
+            } catch (error) {
+                showStatus(`❌ AI models test failed: ${error.message}`, 'error');
+            }
+        }
+
+        function testWebSocket() {
+            showStatus('🔌 Testing WebSocket connection...', 'info');
+
+            try {
+                if (wsConnection) {
+                    wsConnection.close();
+                }
+
+                wsConnection = new WebSocket('ws://localhost:4000');
+
+                wsConnection.onopen = function() {
+                    showStatus('✅ WebSocket connected successfully!', 'success');
+                    // Send a ping message
+                    wsConnection.send(JSON.stringify({
+                        type: 'ping',
+                        payload: { message: 'Hello from demo!' },
+                        timestamp: new Date().toISOString()
+                    }));
+                };
+
+                wsConnection.onmessage = function(event) {
+                    const message = JSON.parse(event.data);
+                    console.log('WebSocket message received:', message);
+                    if (message.type === 'pong') {
+                        showStatus('✅ WebSocket ping/pong successful!', 'success');
+                    }
+                };
+
+                wsConnection.onerror = function(error) {
+                    showStatus('❌ WebSocket connection failed', 'error');
+                };
+
+                wsConnection.onclose = function() {
+                    console.log('WebSocket connection closed');
+                };
+
+            } catch (error) {
+                showStatus(`❌ WebSocket test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-refresh backend status every 30 seconds
+        setInterval(checkBackendStatus, 30000);
+    </script>
+</body>
+</html>

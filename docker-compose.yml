@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CORS_ORIGIN=http://localhost:3000
+      - LOG_LEVEL=debug
+      - HEADLESS_BROWSER=true
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/logs:/app/logs
+      - ./backend/screenshots:/app/screenshots
+      - ./backend/videos:/app/videos
+      - ./backend/har:/app/har
+    depends_on:
+      - redis
+    networks:
+      - ai-testing-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:3001
+      - REACT_APP_WS_URL=ws://localhost:3001
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    depends_on:
+      - backend
+    networks:
+      - ai-testing-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-testing-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=ai_testing_agent
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ai-testing-network
+    restart: unless-stopped
+
+networks:
+  ai-testing-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  postgres_data:

@@ -104,13 +104,31 @@ export const aiService = {
     return apiClient.post('/ai/models/switch', { modelId });
   },
 
-  // Convert English text to code
+  // Convert English text to code (old fallback)
   convertToCode: async (payload: {
     englishText: string;
     targetLanguage?: string;
     framework?: string;
   }) => {
     return apiClient.post('/ai/convert-to-code', payload);
+  },
+
+  // Generate test using new AI-powered endpoint
+  generateTest: async (payload: {
+    summary: string;
+    actions: string[];
+  }) => {
+    return apiClient.post('/test-generation/generate', payload);
+  },
+
+  // Get generation logs
+  getGenerationLogs: async () => {
+    return apiClient.get('/test-generation/logs');
+  },
+
+  // Get specific generation log
+  getGenerationLog: async (id: string) => {
+    return apiClient.get(`/test-generation/logs/${id}`);
   },
 };
 

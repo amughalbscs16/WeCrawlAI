@@ -58,11 +58,14 @@ const Dashboard: React.FC = () => {
               Security Testing
             </h3>
             <p className="text-secondary-600 mb-4">
-              Automated vulnerability scanning with SQL injection, XSS, and more
+              Automated vulnerability scanning with SQL injection, XSS, CSRF, and more - now fully integrated!
             </p>
-            <button className="btn btn-success w-full" disabled>
-              Coming Soon
-            </button>
+            <Link
+              to="/test-editor"
+              className="btn btn-success w-full"
+            >
+              Run Security Tests
+            </Link>
           </div>
         </div>
 

@@ -19,6 +19,14 @@ logs/
 *.log
 backend/logs/
 frontend/logs/
+api_logs.json
+api_actions.log
+logs_code.txt
+api_logs_backup_*.json
+api_actions_backup_*.log
+lifetime_costs.json
+daily_costs.json
+lifetime_costs_backup_*.json
 
 # Runtime data
 pids
@@ -104,3 +112,6 @@ backend/user-settings.json
 # Baselines and test artifacts
 baselines/
 backend/baselines/
+
+# Claude Desktop config (contains secrets)
+claude_desktop_config.json

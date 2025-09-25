@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Test Generator - GPT-5-nano</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 900px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .model-info {
+            background: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            margin-bottom: 30px;
+            border-radius: 5px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .actions-container {
+            margin-bottom: 25px;
+        }
+
+        .action-item {
+            display: flex;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .action-item input {
+            flex: 1;
+            margin-right: 10px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .result-container {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #e5e7eb;
+            display: none;
+        }
+
+        .result-container.show {
+            display: block;
+        }
+
+        .code-output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .annotations {
+            background: #f0fdf4;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .annotations h3 {
+            color: #065f46;
+            margin-bottom: 10px;
+        }
+
+        .annotations ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .annotations li {
+            padding: 5px 0;
+            color: #047857;
+        }
+
+        .annotations li:before {
+            content: "✓ ";
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .cost-info {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .links {
+            display: flex;
+            gap: 20px;
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #e5e7eb;
+        }
+
+        .links a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .links a:hover {
+            text-decoration: underline;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #fee;
+            color: #c00;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 AI Test Generator</h1>
+        <p class="subtitle">Generate automated tests from simple English descriptions</p>
+
+        <div class="model-info">
+            <strong>Model:</strong> GPT-5-nano ($0.05/1M input, $0.40/1M output) with GPT-3.5-turbo fallback<br>
+            <strong>Status:</strong> <span id="status">Ready</span>
+        </div>
+
+        <form id="testForm">
+            <div class="form-group">
+                <label for="summary">Test Summary</label>
+                <input type="text" id="summary" placeholder="e.g., Test user login functionality" required>
+            </div>
+
+            <div class="form-group">
+                <label for="actions">Test Actions</label>
+                <div class="actions-container" id="actionsContainer">
+                    <div class="action-item">
+                        <input type="text" class="action-input" placeholder="e.g., Navigate to login page" required>
+                        <button type="button" class="btn btn-secondary btn-small" onclick="removeAction(this)">Remove</button>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="addAction()">+ Add Action</button>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="generateBtn">
+                Generate Test Code
+            </button>
+        </form>
+
+        <div class="result-container" id="resultContainer">
+            <h2>Generated Test Code</h2>
+
+            <div class="cost-info" id="costInfo" style="display: none;">
+                <strong>Cost Estimate:</strong> <span id="costEstimate"></span><br>
+                <strong>Model Used:</strong> <span id="modelUsed"></span>
+            </div>
+
+            <div class="annotations" id="annotationsContainer" style="display: none;">
+                <h3>Test Annotations</h3>
+                <ul id="annotationsList"></ul>
+            </div>
+
+            <pre class="code-output" id="codeOutput"></pre>
+
+            <button class="btn btn-secondary" onclick="copyCode()">Copy Code</button>
+        </div>
+
+        <div class="links">
+            <a href="/logs" target="_blank">📊 View Logs Dashboard</a>
+            <a href="/api/test-generation/statistics" target="_blank">📈 API Statistics</a>
+            <a href="/api/test-generation/lifetime-costs" target="_blank">💰 Lifetime Costs</a>
+        </div>
+    </div>
+
+    <script>
+        function addAction() {
+            const container = document.getElementById('actionsContainer');
+            const actionItem = document.createElement('div');
+            actionItem.className = 'action-item';
+            actionItem.innerHTML = `
+                <input type="text" class="action-input" placeholder="Enter test action" required>
+                <button type="button" class="btn btn-secondary btn-small" onclick="removeAction(this)">Remove</button>
+            `;
+            container.appendChild(actionItem);
+        }
+
+        function removeAction(button) {
+            const container = document.getElementById('actionsContainer');
+            if (container.children.length > 1) {
+                button.parentElement.remove();
+            }
+        }
+
+        function copyCode() {
+            const codeOutput = document.getElementById('codeOutput');
+            navigator.clipboard.writeText(codeOutput.textContent)
+                .then(() => alert('Code copied to clipboard!'))
+                .catch(err => alert('Failed to copy: ' + err));
+        }
+
+        document.getElementById('testForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const summary = document.getElementById('summary').value;
+            const actionInputs = document.querySelectorAll('.action-input');
+            const actions = Array.from(actionInputs)
+                .map(input => input.value.trim())
+                .filter(action => action.length > 0);
+
+            if (actions.length === 0) {
+                alert('Please add at least one test action');
+                return;
+            }
+
+            const generateBtn = document.getElementById('generateBtn');
+            const originalText = generateBtn.innerHTML;
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = 'Generating<span class="spinner"></span>';
+
+            try {
+                const response = await fetch('/api/test-generation/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ summary, actions })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Show results
+                    document.getElementById('resultContainer').classList.add('show');
+                    document.getElementById('codeOutput').textContent = result.data.code;
+
+                    // Show annotations if available
+                    if (result.data.annotations && result.data.annotations.length > 0) {
+                        document.getElementById('annotationsContainer').style.display = 'block';
+                        const annotationsList = document.getElementById('annotationsList');
+                        annotationsList.innerHTML = result.data.annotations
+                            .map(annotation => `<li>${annotation}</li>`)
+                            .join('');
+                    }
+
+                    // Estimate cost (rough estimate)
+                    const tokenEstimate = (summary.length + actions.join(' ').length + result.data.code.length) / 4;
+                    const costEstimate = (tokenEstimate / 1000) * 0.0004; // Using output pricing
+                    document.getElementById('costInfo').style.display = 'block';
+                    document.getElementById('costEstimate').textContent = `~$${costEstimate.toFixed(6)}`;
+                    document.getElementById('modelUsed').textContent = 'GPT-5-nano / GPT-3.5-turbo';
+
+                    // Scroll to results
+                    document.getElementById('resultContainer').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    throw new Error(result.error || 'Failed to generate test');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+                console.error('Error:', error);
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = originalText;
+            }
+        });
+
+        // Add some default actions for testing
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('summary').value = 'Test user login functionality';
+            const firstAction = document.querySelector('.action-input');
+            firstAction.value = 'Navigate to login page';
+
+            addAction();
+            document.querySelectorAll('.action-input')[1].value = 'Enter username "testuser"';
+
+            addAction();
+            document.querySelectorAll('.action-input')[2].value = 'Enter password "password123"';
+
+            addAction();
+            document.querySelectorAll('.action-input')[3].value = 'Click login button';
+
+            addAction();
+            document.querySelectorAll('.action-input')[4].value = 'Verify dashboard is displayed';
+        });
+    </script>
+</body>
+</html>

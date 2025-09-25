@@ -1,0 +1,31 @@
+{
+  "models": {
+    "cheapest": {
+      "name": "gpt-5-nano",
+      "pricing": {
+        "input_per_1M": 0.050,
+        "output_per_1M": 0.400,
+        "cached_input_per_1M": 0.005,
+        "description": "GPT-5 nano - The fastest, cheapest version of GPT-5"
+      }
+    },
+    "fallback": {
+      "name": "gpt-3.5-turbo",
+      "pricing": {
+        "input_per_1M": 0.50,
+        "output_per_1M": 1.50,
+        "description": "Fallback model if GPT-5 nano is unavailable"
+      }
+    },
+    "balanced": {
+      "name": "gpt-4o-mini",
+      "pricing": {
+        "input_per_1M": 0.15,
+        "output_per_1M": 0.60,
+        "description": "Good balance of cost and capability"
+      }
+    }
+  },
+  "defaultModel": "cheapest",
+  "comment": "Using GPT-5 nano - 10x cheaper than gpt-3.5-turbo!"
+}

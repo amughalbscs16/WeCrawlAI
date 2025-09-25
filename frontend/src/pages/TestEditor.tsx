@@ -6,6 +6,7 @@ import { RootState, AppDispatch } from '../store/store';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { aiService } from '../services/testService';
+import GenerationLogs from '../components/GenerationLogs';
 
 const TestEditor: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -30,6 +31,7 @@ And I should see the dashboard`);
   const [isValidUrl, setIsValidUrl] = useState(true);
   const [convertedCode, setConvertedCode] = useState('');
   const [isConverting, setIsConverting] = useState(false);
+  const [showGenerationLogs, setShowGenerationLogs] = useState(false);
 
   const validateUrl = (urlString: string) => {
     try {
@@ -48,13 +50,57 @@ And I should see the dashboard`);
 
     setIsConverting(true);
     try {
-      const response = await aiService.convertToCode({
-        englishText,
-        targetLanguage: 'selenium-webdriver',
-        framework: 'nodejs'
-      });
+      // Parse the scenario text to extract summary and actions
+      const lines = englishText.split('\n').filter(line => line.trim());
+      let summary = 'Test Scenario';
+      const actions: string[] = [];
 
-      setConvertedCode(response.data.data.convertedCode);
+      // Extract summary from first few lines
+      if (lines.length > 0) {
+        const firstLine = lines[0];
+        if (firstLine.toLowerCase().includes('scenario:')) {
+          summary = firstLine.replace(/scenario:/i, '').trim();
+        } else {
+          summary = lines[0];
+        }
+      }
+
+      // Extract actions from the rest
+      for (const line of lines.slice(1)) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.toLowerCase().startsWith('as ') &&
+            !trimmed.toLowerCase().startsWith('so that')) {
+          actions.push(trimmed);
+        }
+      }
+
+      // If we have actions, use the new AI generation endpoint
+      if (actions.length > 0) {
+        const response = await aiService.generateTest({
+          summary,
+          actions
+        });
+
+        if (response.data.success) {
+          setConvertedCode(response.data.data.code);
+          // Store the generation ID for future reference
+          if (response.data.data.generationId) {
+            localStorage.setItem('lastGenerationId', response.data.data.generationId);
+            console.log('Generation ID:', response.data.data.generationId);
+            console.log('View detailed log at: /api/test-generation/logs/' + response.data.data.generationId);
+          }
+        } else {
+          throw new Error('Failed to generate test');
+        }
+      } else {
+        // Fallback to old API if no clear actions
+        const response = await aiService.convertToCode({
+          englishText,
+          targetLanguage: 'selenium-webdriver',
+          framework: 'nodejs'
+        });
+        setConvertedCode(response.data.data.convertedCode);
+      }
     } catch (error) {
       console.error('Error converting text to code:', error);
       // Fallback to simple rule-based conversion
@@ -225,7 +271,7 @@ And I should see the dashboard`);
       toast.success('Test started successfully!', { id: 'test-execution' });
 
       // Navigate to execution monitoring page
-      navigate(`/executions/${result.executionId}`);
+      navigate(`/executions/${result.data.executionId}`);
     } catch (error: any) {
       toast.error(error.message || 'Failed to start test execution', { id: 'test-execution' });
     }
@@ -471,6 +517,31 @@ And I should see the dashboard`);
             </div>
           </div>
         </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="card"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-secondary-900">
+            Test Generation History
+          </h2>
+          <button
+            className="btn btn-outline btn-sm"
+            onClick={() => setShowGenerationLogs(!showGenerationLogs)}
+          >
+            {showGenerationLogs ? '🔼 Hide Logs' : '🔽 Show Logs'}
+          </button>
+        </div>
+
+        {showGenerationLogs && (
+          <div className="mt-4">
+            <GenerationLogs />
+          </div>
+        )}
       </motion.div>
     </div>
   );

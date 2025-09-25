@@ -1,0 +1,44 @@
+{
+  "id": "gen_1758782921508_xa4jh07s6",
+  "timestamp": "2025-09-25T06:48:41.508Z",
+  "model": "gpt-3.5-turbo",
+  "scenario": {
+    "summary": "User Login Test",
+    "actions": [
+      "I want to click on Canada",
+      "click on a post inside canada",
+      "look at it"
+    ]
+  },
+  "input": {
+    "prompt": "Generate a test for the following scenario:\n\nSummary: User Login Test\n\nActions to perform:\n1. I want to click on Canada\n2. click on a post inside canada\n3. look at it\n\nPlease generate:\n1. Complete test code that performs all the actions\n2. Add detailed comments and annotations\n3. Include proper setup and teardown\n4. Add error handling for each critical step\n5. Make it compatible with common testing frameworks (Jest/Mocha/Playwright)"
+  },
+  "output": {
+    "code": "```javascript\n// Import necessary libraries\nconst { test, expect } = require('playwright');\n\n// Define the test suite\ndescribe('User Login Test', () => {\n    let page;\n\n    // Setup before each test\n    beforeEach(async () => {\n        // Launch a new browser instance\n        const browser = await playwright.chromium.launch();\n        // Create a new page\n        page = await browser.newPage();\n    });\n\n    // Teardown after each test\n    afterEach(async () => {\n        // Close the browser after each test\n        await page.close();\n    });\n\n    // Define the test\n    test('User login test', async () => {\n        try {\n            // Navigate to the website\n            await page.goto('https://example.com');\n\n            // Click on Canada\n            await page.click('text=Canada');\n\n            // Wait for the page to load\n            await page.waitForLoadState('networkidle');\n\n            // Click on a post inside Canada\n            await page.click('text=Post Title');\n\n            // Wait for the post to load\n            await page.waitForLoadState('networkidle');\n\n            // Verify if the post is displayed\n            const postTitle = await page.textContent('.post-title');\n            expect(postTitle).not.toBeNull();\n        } catch (error) {\n            // Handle any errors that occur during the test\n            console.error('An error occurred:', error);\n            // Take a screenshot for debugging purposes\n            await page.screenshot({ path: 'error.png' });\n            // Fail the test\n            throw error;\n        }\n    });\n});\n```\n\nThis test code performs the following actions:\n1. Launches a new browser instance before each test.\n2. Navigates to a website.\n3. Clicks on the \"Canada\" link.\n4. Waits for the page to load.\n5. Clicks on a post inside Canada.\n6. Waits for the post to load.\n7. Verifies if the post is displayed.\n8. Handles errors that may occur during the test execution.\n9. Closes the browser after each test.",
+    "annotations": [
+      "Import necessary libraries",
+      "Define the test suite",
+      "Setup before each test",
+      "Launch a new browser instance",
+      "Create a new page",
+      "Teardown after each test",
+      "Close the browser after each test",
+      "Define the test",
+      "Navigate to the website",
+      "Click on Canada",
+      "Wait for the page to load",
+      "Click on a post inside Canada",
+      "Wait for the post to load",
+      "Verify if the post is displayed",
+      "Handle any errors that occur during the test",
+      "Take a screenshot for debugging purposes",
+      "Fail the test"
+    ],
+    "tokenInfo": {
+      "input": 191,
+      "output": 425,
+      "total": 616
+    },
+    "estimatedCost": "0.179550"
+  }
+}

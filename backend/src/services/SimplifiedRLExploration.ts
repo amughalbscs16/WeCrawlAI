@@ -195,21 +195,22 @@ export class SimplifiedRLExploration {
 
     // CRITICAL: Check if we're on a special URL (data:, about:blank, etc)
     // These URLs appear after going back from the initial page
-    // We should immediately go forward to return to the actual page
+    // We should navigate to the start URL to return to the actual page
     const isSpecialUrl = state.url.startsWith('data:') ||
                         state.url.startsWith('about:') ||
                         state.url === '' ||
                         state.url === 'about:blank';
 
     if (isSpecialUrl) {
-      logger.info('⚠️ On special URL, navigating forward to return to actual page', {
+      logger.info('⚠️ On special URL, navigating to start URL to return to actual page', {
         currentUrl: state.url,
-        targetDomain: startDomain
+        targetUrl: session.startUrl
       });
 
-      // Use forward instead of back to return to the actual page
+      // Navigate directly to the start URL instead of using forward/back
       return {
-        type: 'forward',
+        type: 'navigate',
+        value: session.startUrl,
         timestamp: new Date(),
         success: false
       };
@@ -244,8 +245,12 @@ export class SimplifiedRLExploration {
     const noElementsOnPage = state.elements.length === 0;
     const onlyScrolledRecently = session.consecutiveScrolls >= 2;
 
+    // Check if this is the start page - we should never leave it via back navigation
+    const isStartPage = this.normalizeUrl(state.url) === this.normalizeUrl(session.startUrl);
+
     // If stuck on a real page with no elements or only scrolling, go back
-    if (noElementsOnPage || (onlyScrolledRecently && state.elements.length < 3)) {
+    // BUT: Never go back from the start page to avoid the data:, loop
+    if (!isStartPage && (noElementsOnPage || (onlyScrolledRecently && state.elements.length < 3))) {
       logger.info('🔙 Dead-end detected, navigating back', {
         currentUrl,
         elementCount: state.elements.length,

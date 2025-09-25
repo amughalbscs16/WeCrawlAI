@@ -35,7 +35,7 @@ Get up and running in under 10 minutes:
 ### Prerequisites
 - **Node.js 18+** - [Download here](https://nodejs.org/)
 - **Chrome Browser** - For test execution
-- **AI API Key** - Anthropic Claude or OpenAI (get free credits)
+- **OpenAI API Key** - Get from [OpenAI Platform](https://platform.openai.com/)
 
 ### Installation
 
@@ -43,20 +43,20 @@ Get up and running in under 10 minutes:
    ```bash
    git clone <your-repository-url>
    cd ai-testing-agent
-   ./setup.bat        # Windows
-   ./setup.sh         # macOS/Linux
+   npm install
    ```
 
-2. **Configure AI API Key**
+2. **Configure Environment Variables**
+
+   Create `backend/.env`:
    ```bash
-   # Edit backend/.env
-   ANTHROPIC_API_KEY=sk-ant-your-key-here
+   PORT=15000
+   OPENAI_API_KEY=sk-your-openai-key-here
    ```
 
-3. **Start the Application**
+3. **Run the Application**
    ```bash
-   ./start.bat        # Windows
-   ./start.sh         # macOS/Linux
+   npm run dev
    ```
 
 4. **Open Your Browser**

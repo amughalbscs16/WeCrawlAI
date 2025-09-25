@@ -37,6 +37,7 @@ export interface SecurityTestConfig {
 
 export class SecurityTestingService {
   private config: SecurityTestConfig;
+  private logStep?: (description: string, action: string, details?: any) => Promise<void>;
 
   constructor(config?: Partial<SecurityTestConfig>) {
     this.config = {
@@ -54,7 +55,12 @@ export class SecurityTestingService {
     };
   }
 
-  async runSecurityTests(driver: any, baseUrl: string): Promise<SecurityFinding[]> {
+  async runSecurityTests(
+    driver: any,
+    baseUrl: string,
+    logStep?: (description: string, action: string, details?: any) => Promise<void>
+  ): Promise<SecurityFinding[]> {
+    this.logStep = logStep;
     const findings: SecurityFinding[] = [];
 
     logger.info('Starting security tests', {
@@ -143,13 +149,30 @@ export class SecurityTestingService {
 
     logger.debug('Testing SQL injection vulnerabilities');
 
+    if (this.logStep) {
+      await this.logStep('Starting SQL injection tests', 'security_test', { test: 'sql_injection' });
+    }
+
     try {
       // Find input fields
       const inputs = await page.locator('input[type="text"], input[type="email"], input[type="search"], textarea').all();
 
+      if (this.logStep && inputs.length > 0) {
+        await this.logStep(`Found ${inputs.length} input fields to test`, 'info', { count: inputs.length });
+      }
+
       for (const input of inputs.slice(0, this.config.maxTestsPerType)) {
         for (const payload of sqlPayloads.slice(0, 3)) { // Limit payloads per input
           try {
+            const inputName = await input.getAttribute('name') || await input.getAttribute('id') || 'unknown';
+
+            if (this.logStep) {
+              await this.logStep(`Testing SQL injection in field: ${inputName}`, 'type', {
+                field: inputName,
+                payload: payload
+              });
+            }
+
             await input.fill(payload);
 
             // Submit form if available
@@ -157,6 +180,12 @@ export class SecurityTestingService {
             if (await form.count() > 0) {
               const submitButton = form.locator('button[type="submit"], input[type="submit"]').first();
               if (await submitButton.count() > 0) {
+                if (this.logStep) {
+                  await this.logStep('Submitting form with SQL payload', 'click', {
+                    element: 'submit button',
+                    currentUrl: page.url()
+                  });
+                }
                 await submitButton.click();
                 await page.waitForTimeout(1000);
 

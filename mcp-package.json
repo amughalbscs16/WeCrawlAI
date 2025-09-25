@@ -1,0 +1,33 @@
+{
+  "name": "test-generation-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for AI-powered test generation using GPT-4o-mini",
+  "main": "backend/mcp-server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node backend/mcp-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.2",
+    "openai": "^4.104.0",
+    "dotenv": "^16.3.1"
+  },
+  "mcp": {
+    "name": "Test Generation MCP",
+    "description": "Generate automated tests using GPT-4o-mini with clean code extraction",
+    "tools": [
+      {
+        "name": "generate_test",
+        "description": "Generate test code from scenario description"
+      },
+      {
+        "name": "extract_last_test",
+        "description": "Extract the last generated test in clean format"
+      },
+      {
+        "name": "get_test_history",
+        "description": "View test generation history"
+      }
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "gen_1758782916927_59tw7vy4p",
+  "timestamp": "2025-09-25T06:48:36.927Z",
+  "model": "gpt-3.5-turbo",
+  "scenario": {
+    "summary": "User Login Test",
+    "actions": [
+      "I want to click on Canada",
+      "And click on a post inside canada",
+      "And look at it"
+    ]
+  },
+  "input": {
+    "prompt": "Generate a test for the following scenario:\n\nSummary: User Login Test\n\nActions to perform:\n1. I want to click on Canada\n2. And click on a post inside canada\n3. And look at it\n\nPlease generate:\n1. Complete test code that performs all the actions\n2. Add detailed comments and annotations\n3. Include proper setup and teardown\n4. Add error handling for each critical step\n5. Make it compatible with common testing frameworks (Jest/Mocha/Playwright)"
+  },
+  "output": {
+    "code": "```javascript\n// Import necessary libraries\nconst { test, expect } = require('playwright');\n\n// Define the test suite\ndescribe('User Login Test', () => {\n    let page;\n\n    // Setup before each test\n    beforeEach(async () => {\n        page = await browser.newPage();\n        await page.goto('https://example.com');\n    });\n\n    // Teardown after each test\n    afterEach(async () => {\n        await page.close();\n    });\n\n    // Test case for user login\n    test('User Login Test', async () => {\n        try {\n            // Step 1: Click on Canada\n            await page.click('text=Canada');\n\n            // Step 2: Click on a post inside Canada\n            await page.click('text=Post Title');\n\n            // Step 3: Look at the post\n            const postContent = await page.textContent('.post-content');\n            console.log('Post Content:', postContent);\n\n            // Assertion to check if post content is displayed\n            expect(postContent).not.toBeNull();\n        } catch (error) {\n            // Handle any errors that occur during the test\n            console.error('An error occurred:', error);\n            throw error;\n        }\n    });\n});\n```\n\nIn this code:\n- We import the necessary libraries for testing with Playwright.\n- We define a test suite named 'User Login Test'.\n- We set up the browser page before each test and close it after each test.\n- The test case 'User Login Test' performs the actions mentioned in the scenario.\n- Each step is annotated with a comment explaining what action is being performed.\n- Proper error handling is implemented to catch and log any errors that occur during the test.\n- An assertion is added to check if the post content is displayed correctly.\n- The code is compatible with the Playwright testing framework.",
+    "annotations": [
+      "Import necessary libraries",
+      "Define the test suite",
+      "Setup before each test",
+      "Teardown after each test",
+      "Test case for user login",
+      "Step 1: Click on Canada",
+      "Step 2: Click on a post inside Canada",
+      "Step 3: Look at the post",
+      "Assertion to check if post content is displayed",
+      "Handle any errors that occur during the test"
+    ],
+    "tokenInfo": {
+      "input": 193,
+      "output": 371,
+      "total": 564
+    },
+    "estimatedCost": "0.158050"
+  }
+}

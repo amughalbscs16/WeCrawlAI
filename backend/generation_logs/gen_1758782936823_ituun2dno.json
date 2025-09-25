@@ -1,0 +1,42 @@
+{
+  "id": "gen_1758782936823_ituun2dno",
+  "timestamp": "2025-09-25T06:48:56.823Z",
+  "model": "gpt-3.5-turbo",
+  "scenario": {
+    "summary": "User Login Test",
+    "actions": [
+      "I want to log in to the application",
+      "Given I am on the login page",
+      "When I enter my username and password",
+      "And I click the login button",
+      "Then I should be logged in successfully",
+      "And I should see the dashboard"
+    ]
+  },
+  "input": {
+    "prompt": "Generate a test for the following scenario:\n\nSummary: User Login Test\n\nActions to perform:\n1. I want to log in to the application\n2. Given I am on the login page\n3. When I enter my username and password\n4. And I click the login button\n5. Then I should be logged in successfully\n6. And I should see the dashboard\n\nPlease generate:\n1. Complete test code that performs all the actions\n2. Add detailed comments and annotations\n3. Include proper setup and teardown\n4. Add error handling for each critical step\n5. Make it compatible with common testing frameworks (Jest/Mocha/Playwright)"
+  },
+  "output": {
+    "code": "```javascript\n// Import necessary libraries\nconst { test, expect } = require('jest');\nconst { LoginPage } = require('../pages/LoginPage');\nconst { DashboardPage } = require('../pages/DashboardPage');\n\n// Test suite for User Login\ndescribe('User Login Test', () => {\n    let loginPage;\n    let dashboardPage;\n\n    // Setup before each test case\n    beforeEach(() => {\n        loginPage = new LoginPage();\n        dashboardPage = new DashboardPage();\n    });\n\n    // Teardown after each test case\n    afterEach(() => {\n        // Perform any necessary cleanup\n    });\n\n    // Test case for successful user login\n    test('User should be able to login successfully and see the dashboard', async () => {\n        try {\n            // Given I am on the login page\n            await loginPage.navigate();\n\n            // When I enter my username and password\n            await loginPage.enterUsername('testuser');\n            await loginPage.enterPassword('password123');\n\n            // And I click the login button\n            await loginPage.clickLoginButton();\n\n            // Then I should be logged in successfully\n            expect(await dashboardPage.isLoggedIn()).toBeTruthy();\n\n            // And I should see the dashboard\n            expect(await dashboardPage.isDashboardVisible()).toBeTruthy();\n        } catch (error) {\n            // Handle any errors that occur during the test\n            console.error('An error occurred:', error);\n        }\n    });\n});\n```\n\nIn the above code:\n1. We import the necessary libraries for testing and the page objects for the Login and Dashboard pages.\n2. We define a test suite for the User Login Test using Jest framework.\n3. We set up the `loginPage` and `dashboardPage` instances before each test case and perform any necessary cleanup after each test case.\n4. We define a test case for successful user login where we navigate to the login page, enter username and password, click the login button, and then assert that the user is logged in successfully and the dashboard is visible.\n5. Proper error handling is implemented to catch and log any errors that occur during the test execution.",
+    "annotations": [
+      "Import necessary libraries",
+      "Test suite for User Login",
+      "Setup before each test case",
+      "Teardown after each test case",
+      "Perform any necessary cleanup",
+      "Test case for successful user login",
+      "Given I am on the login page",
+      "When I enter my username and password",
+      "And I click the login button",
+      "Then I should be logged in successfully",
+      "And I should see the dashboard",
+      "Handle any errors that occur during the test"
+    ],
+    "tokenInfo": {
+      "input": 226,
+      "output": 426,
+      "total": 652
+    },
+    "estimatedCost": "0.181700"
+  }
+}

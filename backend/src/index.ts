@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
+import path from 'path';
 
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
@@ -16,6 +17,8 @@ import settingsRoutes from './routes/settings';
 import explorationRoutes from './routes/explorationRoutes';
 import simplifiedExplorationRoutes from './routes/simplifiedExplorationRoutes';
 import reportsRoutes from './routes/reportsRoutes';
+import testGenerationRoutes from './routes/testGenerationRoutes';
+import { getLogsDashboard, getLogsJSON } from './controllers/logsController';
 import { WebSocketManager } from './services/WebSocketManager';
 
 // Load environment variables
@@ -55,6 +58,9 @@ app.use(morgan('combined', {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, '../public')));
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
@@ -77,6 +83,85 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/exploration', explorationRoutes);
 app.use('/api/simplified-exploration', simplifiedExplorationRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/test-generation', testGenerationRoutes);
+
+// EASY ACCESS LOGS DASHBOARD - Just go to http://localhost:15000/logs
+app.get('/logs', getLogsDashboard);
+app.get('/api/logs', getLogsJSON);
+
+// Home page with links to all features
+app.get('/', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>AI Testing Agent</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          min-height: 100vh;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          margin: 0;
+        }
+        .container {
+          background: white;
+          padding: 40px;
+          border-radius: 20px;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+          max-width: 600px;
+          width: 90%;
+        }
+        h1 {
+          color: #2d3748;
+          margin-bottom: 30px;
+          text-align: center;
+        }
+        .links {
+          display: grid;
+          gap: 15px;
+        }
+        a {
+          display: block;
+          padding: 15px 20px;
+          background: linear-gradient(135deg, #667eea, #764ba2);
+          color: white;
+          text-decoration: none;
+          border-radius: 10px;
+          font-weight: bold;
+          transition: transform 0.3s;
+          text-align: center;
+        }
+        a:hover {
+          transform: translateY(-3px);
+        }
+        .badge {
+          display: inline-block;
+          background: rgba(255,255,255,0.3);
+          padding: 2px 8px;
+          border-radius: 5px;
+          font-size: 12px;
+          margin-left: 10px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>🚀 AI Testing Agent</h1>
+        <div class="links">
+          <a href="/logs">📊 View Logs Dashboard <span class="badge">NEW!</span></a>
+          <a href="/api/logs">📄 Get Logs (JSON)</a>
+          <a href="/api/test-generation/statistics">💰 API Usage Statistics</a>
+          <a href="http://localhost:15001" target="_blank">🎨 Frontend UI</a>
+          <a href="/api/health">❤️ Health Check</a>
+        </div>
+      </div>
+    </body>
+    </html>
+  `);
+});
 
 // Error handling
 app.use(errorHandler);
@@ -112,5 +197,4 @@ process.on('SIGINT', () => {
   });
 });
 
-// Trigger nodemon restart
 export { app, server };

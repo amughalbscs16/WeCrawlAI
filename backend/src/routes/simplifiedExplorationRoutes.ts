@@ -257,6 +257,42 @@ router.get('/:sessionId/stats', async (req, res): Promise<void> => {
 });
 
 /**
+ * GET /api/simplified-exploration/:sessionId/export
+ * Export simplified session as JSON or CSV
+ */
+router.get('/:sessionId/export', async (req, res): Promise<void> => {
+  try {
+    const { sessionId } = req.params;
+    const format = (req.query.format as string) || 'json';
+
+    const data = (simplifiedRLExploration as any).getSessionExport?.(sessionId);
+    if (!data) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    if (format === 'csv') {
+      const rows = [ ['index','actionType','success','url','elements'] ];
+      for (const t of data.timeline) {
+        rows.push([ t.index, t.actionType, t.success, t.url || '', t.elements ]);
+      }
+      const csv = rows.map(r => r.map(v => (typeof v === 'string' && v.includes(',') ? '"'+v.replace(/"/g,'""')+'"' : v)).join(',')).join('\n');
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="simplified_${sessionId}.csv"`);
+      res.send(csv);
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="simplified_${sessionId}.json"`);
+    res.send(JSON.stringify(data, null, 2));
+  } catch (error: any) {
+    logger.error('Failed to export simplified session', { sessionId: req.params.sessionId, error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to export session', details: error.message });
+  }
+});
+
+/**
  * DELETE /api/simplified-exploration/:sessionId
  * End exploration session
  */

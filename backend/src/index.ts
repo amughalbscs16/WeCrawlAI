@@ -154,6 +154,7 @@ app.get('/', (req, res) => {
           <a href="/logs">📊 View Logs Dashboard <span class="badge">NEW!</span></a>
           <a href="/api/logs">📄 Get Logs (JSON)</a>
           <a href="/api/test-generation/statistics">💰 API Usage Statistics</a>
+          <a href="/exploration-dashboard.html" target="_blank">🧭 Exploration Dashboard <span class="badge">BETA</span></a>
           <a href="http://localhost:15001" target="_blank">🎨 Frontend UI</a>
           <a href="/api/health">❤️ Health Check</a>
         </div>

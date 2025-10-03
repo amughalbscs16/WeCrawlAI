@@ -201,6 +201,92 @@ const Settings: React.FC = () => {
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Exploration Settings */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="card"
+        >
+          <h2 className="text-lg font-semibold text-secondary-900 mb-4">Exploration Settings</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="label">Scheduler Epsilon (0..1)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                className="input"
+                value={(settings as any).exploration?.epsilon ?? 0.15}
+                onChange={(e) => updateSettings('exploration.epsilon', parseFloat(e.target.value))}
+              />
+            </div>
+            <div>
+              <label className="label">Novelty Blend (0=Count, 1=RND)</label>
+              <input
+                type="number"
+                step="0.05"
+                min="0"
+                max="1"
+                className="input"
+                value={(settings as any).exploration?.noveltyBlend ?? 0.3}
+                onChange={(e) => updateSettings('exploration.noveltyBlend', parseFloat(e.target.value))}
+              />
+            </div>
+            <div>
+              <label className="label">Low Novelty Backtrack Threshold</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                className="input"
+                value={(settings as any).exploration?.noveltyLowThreshold ?? 0.4}
+                onChange={(e) => updateSettings('exploration.noveltyLowThreshold', parseFloat(e.target.value))}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="label">Enable RND</label>
+              <input
+                type="checkbox"
+                className="toggle"
+                checked={(settings as any).exploration?.rnd?.enabled ?? true}
+                onChange={(e) => updateSettings('exploration.rnd.enabled', e.target.checked)}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="label">RND inDim</label>
+                <input
+                  type="number"
+                  className="input"
+                  value={(settings as any).exploration?.rnd?.inDim ?? 256}
+                  onChange={(e) => updateSettings('exploration.rnd.inDim', parseInt(e.target.value))}
+                />
+              </div>
+              <div>
+                <label className="label">RND outDim</label>
+                <input
+                  type="number"
+                  className="input"
+                  value={(settings as any).exploration?.rnd?.outDim ?? 64}
+                  onChange={(e) => updateSettings('exploration.rnd.outDim', parseInt(e.target.value))}
+                />
+              </div>
+              <div>
+                <label className="label">RND LR</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  className="input"
+                  value={(settings as any).exploration?.rnd?.lr ?? 0.001}
+                  onChange={(e) => updateSettings('exploration.rnd.lr', parseFloat(e.target.value))}
+                />
+              </div>
+            </div>
+          </div>
+        </motion.div>
         {/* Browser Settings */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

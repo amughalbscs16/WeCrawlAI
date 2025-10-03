@@ -27,6 +27,13 @@ export interface AppSettings {
     autoSave: boolean;
     showAdvancedOptions: boolean;
   };
+  exploration?: {
+    epsilon?: number;                 // scheduler epsilon
+    noveltyBlend?: number;            // 0=count-based only, 1=RND only
+    noveltyLowThreshold?: number;     // frontier backtrack threshold
+    rnd?: { enabled?: boolean; inDim?: number; outDim?: number; lr?: number };
+    frontier?: { maxEntries?: number };
+  };
   lastUpdated: string;
 }
 
@@ -59,6 +66,13 @@ export class SettingsService {
         theme: 'light',
         autoSave: true,
         showAdvancedOptions: false,
+      },
+      exploration: {
+        epsilon: 0.15,
+        noveltyBlend: 0.3,
+        noveltyLowThreshold: 0.4,
+        rnd: { enabled: true, inDim: 256, outDim: 64, lr: 0.001 },
+        frontier: { maxEntries: 500 },
       },
       lastUpdated: new Date().toISOString(),
     };
@@ -161,6 +175,18 @@ export class SettingsService {
       ui: {
         ...this.defaultSettings.ui,
         ...settings.ui,
+      },
+      exploration: {
+        ...this.defaultSettings.exploration,
+        ...(settings.exploration || {}),
+        rnd: {
+          ...(this.defaultSettings.exploration?.rnd || {}),
+          ...((settings.exploration && settings.exploration.rnd) || {}),
+        },
+        frontier: {
+          ...(this.defaultSettings.exploration?.frontier || {}),
+          ...((settings.exploration && settings.exploration.frontier) || {}),
+        }
       },
       lastUpdated: settings.lastUpdated || new Date().toISOString(),
     };

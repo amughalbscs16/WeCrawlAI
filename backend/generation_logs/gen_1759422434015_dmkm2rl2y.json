@@ -1,0 +1,41 @@
+{
+  "id": "gen_1759422434015_dmkm2rl2y",
+  "timestamp": "2025-10-02T16:27:14.015Z",
+  "model": "gpt-3.5-turbo",
+  "scenario": {
+    "summary": "User Login Test",
+    "actions": [
+      "I want to log in to the application",
+      "Given I am on the login page",
+      "When I enter my username and password",
+      "And I click the login button",
+      "Then I should be logged in successfully",
+      "And I should see the dashboard"
+    ]
+  },
+  "input": {
+    "prompt": "Generate a test for the following scenario:\n\nSummary: User Login Test\n\nActions to perform:\n1. I want to log in to the application\n2. Given I am on the login page\n3. When I enter my username and password\n4. And I click the login button\n5. Then I should be logged in successfully\n6. And I should see the dashboard\n\nPlease generate:\n1. Complete test code that performs all the actions\n2. Add detailed comments and annotations\n3. Include proper setup and teardown\n4. Add error handling for each critical step\n5. Make it compatible with common testing frameworks (Jest/Mocha/Playwright)"
+  },
+  "output": {
+    "code": "```javascript\n// Import necessary libraries\nconst { test, expect } = require('playwright');\n\n// Define test suite\ndescribe('User Login Test', () => {\n    let page;\n\n    // Setup before each test\n    beforeEach(async () => {\n        page = await browser.newPage();\n        await page.goto('https://example.com/login');\n    });\n\n    // Teardown after each test\n    afterEach(async () => {\n        await page.close();\n    });\n\n    // Test case for user login\n    test('User should be able to login successfully and see the dashboard', async () => {\n        try {\n            // Given I am on the login page\n            expect(page.url()).toContain('/login');\n\n            // When I enter my username and password\n            await page.fill('input[name=\"username\"]', 'testuser');\n            await page.fill('input[name=\"password\"]', 'password123');\n\n            // And I click the login button\n            await Promise.all([\n                page.waitForNavigation(), // Wait for navigation to complete\n                page.click('button[type=\"submit\"]') // Click the login button\n            ]);\n\n            // Then I should be logged in successfully\n            expect(page.url()).not.toContain('/login');\n\n            // And I should see the dashboard\n            expect(await page.innerText('h1')).toBe('Dashboard');\n        } catch (error) {\n            // Handle any errors that occur during the test\n            console.error('An error occurred:', error);\n            throw error; // Rethrow the error to fail the test\n        }\n    });\n});\n```\n\nThis test code sets up a test suite for the User Login scenario using Playwright testing framework. It includes proper setup and teardown functions to create a new browser page before each test and close it after each test. The test case performs the actions of visiting the login page, entering username and password, clicking the login button, and verifying successful login and dashboard display. Error handling is included to catch and log any errors that occur during the test execution.",
+    "annotations": [
+      "Import necessary libraries",
+      "Define test suite",
+      "Setup before each test",
+      "Teardown after each test",
+      "Test case for user login",
+      "Given I am on the login page",
+      "When I enter my username and password",
+      "And I click the login button",
+      "Then I should be logged in successfully",
+      "And I should see the dashboard",
+      "Handle any errors that occur during the test"
+    ],
+    "tokenInfo": {
+      "input": 226,
+      "output": 408,
+      "total": 634
+    },
+    "estimatedCost": "0.174500"
+  }
+}

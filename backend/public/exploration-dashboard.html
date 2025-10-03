@@ -1,0 +1,223 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Exploration Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; }
+      h1 { margin: 0 0 12px; }
+      .row { display: flex; gap: 20px; flex-wrap: wrap; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 14px; min-width: 280px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #eee; padding: 6px 8px; font-size: 14px; }
+      th { background: #fafafa; text-align: left; }
+      .small { color: #666; font-size: 12px; }
+      input[type=text] { padding: 6px 8px; width: 240px; }
+      button { padding: 6px 10px; }
+    </style>
+  </head>
+  <body>
+    <h1>Exploration Dashboard</h1>
+    <div class="small">Enter sessionId to view metrics and frontier. Or start a Core session below.</div>
+    <div style="margin:10px 0;">
+      <input id="sessionId" type="text" placeholder="session id" />
+      <button onclick="loadAll()">Load</button>
+      <button onclick="subscribeWS()">Subscribe Live</button>
+      <button onclick="exportData('json')">Export JSON</button>
+      <button onclick="exportData('csv')">Export CSV</button>
+    </div>
+    <div class="row">
+      <div class="card" style="flex:2">
+        <h3>Metrics</h3>
+        <pre id="metrics">No data</pre>
+      </div>
+      <div class="card" style="flex:3">
+        <h3>Frontier (same domain)</h3>
+        <table>
+          <thead>
+            <tr><th>URL</th><th>Score</th><th>Visits</th><th>Depth</th><th></th></tr>
+          </thead>
+          <tbody id="frontier"></tbody>
+        </table>
+        <div style="margin-top:12px; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+          <div>
+            <div class="small">Novelty Timeline</div>
+            <canvas id="noveltyChart" width="220" height="42" style="border:1px solid #eee"></canvas>
+          </div>
+          <div>
+            <div class="small">Reward Timeline</div>
+            <canvas id="rewardChart" width="220" height="42" style="border:1px solid #eee"></canvas>
+          </div>
+          <div>
+            <div class="small">Coverage (Pages)</div>
+            <canvas id="coverageChart" width="220" height="42" style="border:1px solid #eee"></canvas>
+          </div>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input id="autoMaxSteps" type="number" value="50" style="width:90px;"/>
+          <input id="autoBacktrackEvery" type="number" value="10" style="width:90px;"/>
+          <input id="autoStallSteps" type="number" value="6" style="width:90px;"/>
+          <input id="autoMinDelta" type="number" step="0.01" value="0.02" style="width:90px;"/>
+          <button onclick="runAuto()">Auto Run</button>
+          <div class="small">Fields: maxSteps, backtrackEvery, stallSteps, minΔ</div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <h3>Start Core Session</h3>
+      <div class="small">Quick launcher for core exploration</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px;">
+        <input id="startUrl" type="text" placeholder="https://example.com" style="width:280px;"/>
+        <select id="strategy">
+          <option value="curiosity_driven">Curiosity Driven</option>
+          <option value="coverage_maximizing">Coverage Maximizing</option>
+          <option value="random">Random</option>
+          <option value="task_oriented">Task Oriented</option>
+          <option value="efficiency_focused">Efficiency Focused</option>
+          <option value="hybrid">Hybrid</option>
+        </select>
+        <input id="maxSteps" type="number" value="50" style="width:80px;"/>
+        <button onclick="startCore()">Start Core</button>
+      </div>
+    </div>
+    <script>
+      let ws;
+      async function loadAll(){
+        const id = document.getElementById('sessionId').value.trim();
+        if(!id) return;
+        const m = await fetch(`/api/exploration/${id}/metrics`).then(r=>r.json()).catch(()=>null);
+        document.getElementById('metrics').textContent = m && m.success ? JSON.stringify(m.data, null, 2) : 'No data';
+        if(m && m.success && m.data && m.data.coverage){
+          appendCoverage(m.data.coverage.pagesCovered||0);
+        }
+        const f = await fetch(`/api/exploration/${id}/frontier`).then(r=>r.json()).catch(()=>null);
+        const tbody = document.getElementById('frontier');
+        tbody.innerHTML='';
+        if(f && f.success){
+          const items = f.data.slice().sort((a,b)=> (b.score||0)-(a.score||0)).slice(0,50);
+          for(const e of items){
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td style="max-width:360px;word-break:break-all;">${e.url}</td>
+                            <td>${(e.score||0).toFixed(3)}</td>
+                            <td>${e.visits||0}</td>
+                            <td>${e.depth||0}</td>
+                            <td><button data-url="${e.url}">Backtrack</button></td>`;
+            tr.querySelector('button').onclick = async (ev)=>{
+              const url = ev.target.getAttribute('data-url');
+              await fetch(`/api/exploration/${id}/backtrack`,{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url})});
+              alert('Backtrack requested to: '+url+' (agent will navigate on next step)');
+            };
+            tbody.appendChild(tr);
+          }
+        }
+      }
+
+      function subscribeWS(){
+        const id = document.getElementById('sessionId').value.trim();
+        if(!id) { alert('Enter sessionId first'); return; }
+        const proto = location.protocol==='https:'?'wss':'ws';
+        ws = new WebSocket(`${proto}://${location.host}/ws`);
+        ws.onopen = ()=>{
+          ws.send(JSON.stringify({ type:'subscribe', payload:{ room:`exploration_${id}` } }));
+        };
+        ws.onmessage = (ev)=>{
+          try{
+            const msg = JSON.parse(ev.data);
+            if(msg.type==='core_metrics'){
+              const { metrics } = msg.payload;
+              document.getElementById('metrics').textContent = JSON.stringify(metrics, null, 2);
+              if(metrics && metrics.coverage){ appendCoverage(metrics.coverage.pagesCovered||0); }
+            } else if (msg.type==='core_frontier'){
+              const { frontier } = msg.payload;
+              const tbody = document.getElementById('frontier');
+              tbody.innerHTML = '';
+              (frontier||[]).slice(0,50).forEach(e=>{
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td style=\"max-width:360px;word-break:break-all;\">${e.url}</td>
+                                <td>${(e.score||0).toFixed(3)}</td>
+                                <td>${e.visits||0}</td>
+                                <td>${e.depth||0}</td>
+                                <td><button data-url=\"${e.url}\">Backtrack</button></td>`;
+                tr.querySelector('button').onclick = async (ev)=>{
+                  const url = ev.target.getAttribute('data-url');
+                  fetch(`/api/exploration/${id}/backtrack`,{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url})});
+                };
+                tbody.appendChild(tr);
+              });
+            } else if (msg.type==='core_step'){
+              const { step } = msg.payload;
+              if(typeof step.novelty==='number') appendNovelty(step.novelty);
+              if(typeof step.reward==='number') appendReward(step.reward);
+            }
+          }catch{}
+        };
+      }
+
+      async function startCore(){
+        const url = document.getElementById('startUrl').value.trim();
+        if(!url){ alert('Enter URL'); return; }
+        const strategy = document.getElementById('strategy').value;
+        const resp = await fetch('/api/exploration/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ startUrl:url, strategy }) });
+        const data = await resp.json();
+        if(!data.success){ alert('Start failed'); return; }
+        document.getElementById('sessionId').value = data.data.sessionId;
+        alert('Core session started: '+data.data.sessionId);
+        loadAll();
+        subscribeWS();
+      }
+
+      function exportData(fmt){
+        const id = document.getElementById('sessionId').value.trim();
+        if(!id){ alert('Enter sessionId'); return; }
+        const a = document.createElement('a');
+        a.href = `/api/exploration/${id}/export?format=${fmt}`;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+
+      // Auto run with cadence
+      async function runAuto(){
+        const id = document.getElementById('sessionId').value.trim();
+        if(!id){ alert('Enter sessionId'); return; }
+        const maxSteps = parseInt(document.getElementById('autoMaxSteps').value,10)||50;
+        const backtrackEvery = parseInt(document.getElementById('autoBacktrackEvery').value,10)||10;
+        const noveltyStallMaxSteps = parseInt(document.getElementById('autoStallSteps').value,10)||6;
+        const noveltyMinDelta = parseFloat(document.getElementById('autoMinDelta').value)||0.02;
+        const resp = await fetch(`/api/exploration/${id}/auto`,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ maxSteps, backtrackEvery, noveltyStallMaxSteps, noveltyMinDelta }) });
+        if(!resp.ok){ alert('Auto run failed'); return; }
+        const data = await resp.json();
+        if(!data.success){ alert('Auto run error: '+(data.error||'')); return; }
+        alert('Auto run completed. Steps: '+(data.data?.summary?.stepsCompleted||0));
+      }
+
+      // Simple sparkline drawers
+      const noveltyArr = []; const rewardArr = []; const coverageArr = [];
+      function appendNovelty(v){ noveltyArr.push(v); if(noveltyArr.length>100) noveltyArr.shift(); drawSpark('noveltyChart', noveltyArr, '#8b5cf6'); }
+      function appendReward(v){ rewardArr.push(v); if(rewardArr.length>100) rewardArr.shift(); drawSpark('rewardChart', rewardArr, '#10b981'); }
+      function appendCoverage(v){ coverageArr.push(v); if(coverageArr.length>100) coverageArr.shift(); drawSpark('coverageChart', coverageArr, '#f59e0b'); }
+
+      function drawSpark(id, arr, color){
+        const c = document.getElementById(id); if(!c) return; const ctx = c.getContext('2d');
+        const w = c.width, h = c.height; ctx.clearRect(0,0,w,h); if(arr.length<2) return;
+        const min = Math.min.apply(null, arr); const max = Math.max.apply(null, arr); const range = max-min || 1;
+        const dx = w / (arr.length-1);
+        ctx.beginPath(); ctx.moveTo(0, h - ((arr[0]-min)/range)*(h-4)-2);
+        for(let i=1;i<arr.length;i++){ const x=i*dx; const y = h - ((arr[i]-min)/range)*(h-4)-2; ctx.lineTo(x,y); }
+        ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+        // fill
+        const grad = ctx.createLinearGradient(0,0,0,h);
+        grad.addColorStop(0, hexToRgba(color,0.2)); grad.addColorStop(1, hexToRgba(color,0));
+        ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+      }
+      function hexToRgba(hex, a){
+        const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+        if(!m) return `rgba(0,0,0,${a})`;
+        const r=parseInt(m[1],16), g=parseInt(m[2],16), b=parseInt(m[3],16);
+        return `rgba(${r},${g},${b},${a})`;
+      }
+    </script>
+  </body>
+  </html>

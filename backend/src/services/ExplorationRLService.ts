@@ -27,6 +27,13 @@ import { ImportantElementFilter, FilteredElement } from './ImportantElementFilte
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
+import { NoveltyEstimator } from '../rl/NoveltyEstimator';
+import { OptionScheduler } from '../rl/OptionScheduler';
+import { OptionContext } from '../rl/Options';
+import { RND } from '../rl/RND';
+import { settingsService } from './SettingsService';
+import { FrontierManager } from '../rl/FrontierManager';
+import { WebSocketManager } from './WebSocketManager';
 
 export class ExplorationRLService {
   private explorationDataDir: string;
@@ -36,6 +43,14 @@ export class ExplorationRLService {
   private rewardCalculator: RewardCalculator;
   private actionExecutor: ActionExecutor;
   private safetyValidator: SafetyValidator;
+  private noveltyEstimator: NoveltyEstimator;
+  private optionScheduler: OptionScheduler;
+  private frontier: FrontierManager;
+  private rnd: RND | null = null;
+  private epsilon = 0.15;
+  private noveltyBlend = 0.3;
+  private noveltyLowThreshold = 0.4;
+  private pendingBacktrack: Map<string, string> = new Map();
 
   constructor() {
     this.explorationDataDir = path.join(process.cwd(), 'exploration_data');
@@ -43,6 +58,34 @@ export class ExplorationRLService {
     this.rewardCalculator = new RewardCalculator();
     this.actionExecutor = new ActionExecutor();
     this.safetyValidator = new SafetyValidator();
+    this.noveltyEstimator = new NoveltyEstimator('exploration');
+    this.loadSettingsSync();
+    this.optionScheduler = new OptionScheduler(this.noveltyEstimator, this.epsilon);
+    this.frontier = new FrontierManager();
+  }
+
+  private loadSettingsSync() {
+    try {
+      // Synchronous read via settingsService (uses fs sync internally)
+      const s: any = (settingsService as any).getDefaultSettings ? null : null; // noop to keep types
+    } catch {}
+  }
+
+  private async applyRuntimeSettings() {
+    try {
+      const s = await settingsService.loadSettings();
+      const ex = s.exploration || {};
+      this.epsilon = ex.epsilon ?? this.epsilon;
+      this.noveltyBlend = ex.noveltyBlend ?? this.noveltyBlend;
+      this.noveltyLowThreshold = ex.noveltyLowThreshold ?? this.noveltyLowThreshold;
+      if (this.optionScheduler) {
+        // recreate to apply epsilon
+        this.optionScheduler = new OptionScheduler(this.noveltyEstimator, this.epsilon);
+      }
+      const rndCfg = ex.rnd || {};
+      const enabled = rndCfg.enabled ?? true;
+      this.rnd = enabled ? new RND({ inDim: rndCfg.inDim ?? 256, outDim: rndCfg.outDim ?? 64, lr: rndCfg.lr ?? 0.001, enabled }) : null;
+    } catch {}
   }
 
   private ensureDirectories(): void {
@@ -69,6 +112,7 @@ export class ExplorationRLService {
     config: ExplorationConfig
   ): Promise<string> {
     try {
+      await this.applyRuntimeSettings();
       const sessionId = uuidv4();
       logger.info('Starting exploration session', { sessionId, startUrl });
 
@@ -91,6 +135,14 @@ export class ExplorationRLService {
       // Capture initial state
       const driver = this.getDriverFromSession(sessionId);
       const initialState = await multiModalStateCaptureService.captureState(driver, sessionId);
+
+      // Seed novelty and frontier with initial state
+      try {
+        const novelty = this.computeNovelty(initialState);
+        this.frontier.consider(initialState, novelty, 0);
+        this.noveltyEstimator.observe(initialState);
+        this.frontier.markVisited(initialState);
+      } catch {}
 
       // Create exploration session
       const session: ExplorationSession = {
@@ -148,8 +200,22 @@ export class ExplorationRLService {
       const currentState = session.states[session.states.length - 1];
       const driver = this.getDriverFromSession(sessionId);
 
-      // Select action based on exploration strategy
-      const action = await this.selectAction(currentState, session.sessionConfig, sessionId);
+      // Handle pending backtrack request (forced NAVIGATE)
+      let action: ActionData;
+      const backtrackUrl = this.pendingBacktrack.get(sessionId);
+      if (backtrackUrl) {
+        action = {
+          type: ActionType.NAVIGATE,
+          value: backtrackUrl,
+          timestamp: new Date(),
+          duration: 0,
+          success: true,
+        } as any;
+        this.pendingBacktrack.delete(sessionId);
+      } else {
+        // Select action based on exploration strategy
+        action = await this.selectAction(currentState, session.sessionConfig, sessionId);
+      }
 
       // Log the selected action with full details
       logger.info('Selected action for exploration', {
@@ -183,6 +249,14 @@ export class ExplorationRLService {
 
       // Capture new state after action
       const newState = await multiModalStateCaptureService.captureState(driver, sessionId);
+
+      // Update novelty/frontier with new state observation
+      try {
+        const novelty = this.computeNovelty(newState);
+        this.frontier.consider(newState, novelty, session.actions.length);
+        this.noveltyEstimator.observe(newState);
+        this.frontier.markVisited(newState);
+      } catch {}
 
       // Calculate reward
       const reward = this.rewardCalculator.calculateReward(
@@ -234,6 +308,46 @@ export class ExplorationRLService {
         totalActions: session.actions.length
       });
 
+      // WebSocket live updates for core exploration
+      try {
+        const ws = WebSocketManager.getInstance();
+        if (ws) {
+          const room = `exploration_${sessionId}`;
+          // Step timeline: novelty and reward
+          ws.broadcastToRoom(room, {
+            type: 'core_step',
+            payload: {
+              sessionId,
+              step: {
+                index: session.actions.length,
+                actionType: action.type,
+                success: action.success,
+                url: newState.url,
+                reward: reward.totalReward,
+                totalReward: session.totalReward,
+                novelty: this.computeNovelty(newState)
+              }
+            }
+          });
+
+          // Metrics snapshot
+          const metrics = this.getSessionMetrics(sessionId);
+          ws.broadcastToRoom(room, {
+            type: 'core_metrics',
+            payload: { sessionId, metrics }
+          });
+
+          // Frontier snapshot (same-domain)
+          const snapshot = (this.frontier as any).snapshot?.() || [];
+          const domain = new URL(newState.url).hostname;
+          const frontier = snapshot.filter((e: any) => e.domain === domain).slice(0, 50);
+          ws.broadcastToRoom(room, {
+            type: 'core_frontier',
+            payload: { sessionId, frontier }
+          });
+        }
+      } catch {}
+
       return { action, newState, reward, done };
     } catch (error: any) {
       logger.error('Failed to perform exploration step', {
@@ -242,6 +356,24 @@ export class ExplorationRLService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Request a backtrack; next exploreStep will navigate to URL or best frontier candidate.
+   */
+  requestBacktrack(sessionId: string, url?: string): string | null {
+    const session = this.sessionsMap.get(sessionId);
+    if (!session) return null;
+    if (!url) {
+      // pick best candidate from same domain
+      const visited = new Set(session.states.map(s => s.url.split('#')[0].split('?')[0]));
+      const candidate = this.frontier.nextCandidate(session.states[session.states.length - 1].url, visited);
+      if (!candidate) return null;
+      this.pendingBacktrack.set(sessionId, candidate);
+      return candidate;
+    }
+    this.pendingBacktrack.set(sessionId, url);
+    return url;
   }
 
   /**
@@ -363,6 +495,56 @@ export class ExplorationRLService {
    * Fixed to detect ping-ponging between URLs
    */
   private async selectCuriosityDrivenAction(state: ExplorationState, sessionId: string): Promise<ActionData> {
+    // Frontier backtracking if stuck (Go-Explore style)
+    try {
+      const session = this.sessionsMap.get(sessionId);
+      if (session) {
+        const recentUrls = session.states.slice(-8).map(s => s.url.split('#')[0].split('?')[0]);
+        const uniq = new Set(recentUrls);
+        const isPingPonging = recentUrls.length >= 6 && uniq.size <= 2;
+        const noveltyNow = this.computeNovelty(state);
+        const lowNovelty = noveltyNow < 0.4;
+        if (isPingPonging || lowNovelty) {
+          const visited = new Set(session.states.map(s => s.url.split('#')[0].split('?')[0]));
+          const nextUrl = this.frontier.nextCandidate(state.url, visited);
+          if (nextUrl && nextUrl !== state.url) {
+            logger.info('Frontier backtracking to explore new branch', { from: state.url, to: nextUrl, reason: isPingPonging ? 'ping_pong' : 'low_novelty' });
+            return {
+              type: ActionType.NAVIGATE,
+              value: nextUrl,
+              timestamp: new Date(),
+              duration: 0,
+              success: true
+            } as any;
+          }
+        }
+      }
+    } catch {}
+
+    // First, try hierarchical option-based policy with novelty bonus
+    try {
+      const session = Array.from(this.sessionsMap.values()).find(s => s.states.includes(state));
+      const recentUrls = session ? session.states.slice(-10).map(s => s.url) : [];
+      const clickedSet = new Set<string>();
+      if (session) {
+        const urlKey = (state.url || '').split('#')[0].split('?')[0];
+        const clickedOnPage = (this.clickedElementsMap.get(session.id)?.get(urlKey)) || new Set<string>();
+        clickedOnPage.forEach(x => clickedSet.add(x));
+      }
+
+      const ctx: OptionContext = {
+        recentUrls,
+        visitedUrls: new Set((session?.states || []).map(s => s.url.split('#')[0].split('?')[0])),
+        clickedSelectorsOnPage: clickedSet,
+      };
+
+      const proposed = this.optionScheduler.proposeAction(state, ctx);
+      if (proposed) {
+        return proposed;
+      }
+    } catch {}
+
+    // Fallback to existing page-context guided heuristics
     // Analyze page context
     const pageContext = PageContextAnalyzer.analyzePageContext(
       state.url,
@@ -656,6 +838,21 @@ export class ExplorationRLService {
       duration: 0,
       success: true
     };
+  }
+
+  private computeNovelty(state: ExplorationState): number {
+    const countNovelty = this.noveltyEstimator.intrinsicReward(state); // 0..1
+    const rndNovelty = this.rnd ? this.normalizeRND(this.rnd.intrinsic(state, true)) : 0; // positive
+    const blend = Math.max(0, Math.min(1, this.noveltyBlend));
+    return (1 - blend) * countNovelty + blend * rndNovelty;
+  }
+
+  private normalizeRND(err: number): number {
+    // Map typical MSE to ~0..1 range; clamp
+    // Assume err in [0, ~0.5] early on; compress via tanh-like mapping
+    const x = err;
+    const y = x / (0.25 + x); // smooth saturating
+    return Math.max(0, Math.min(1, y));
   }
 
   /**
@@ -1229,6 +1426,129 @@ export class ExplorationRLService {
       successRate: session.successfulActions / (session.successfulActions + session.failedActions),
       totalReward: session.totalReward,
       currentUrl: session.states[session.states.length - 1]?.url
+    };
+  }
+
+  /**
+   * Build a comprehensive session export including metrics, frontier, and timeline.
+   */
+  getSessionExport(sessionId: string): any | null {
+    const session = this.sessionsMap.get(sessionId);
+    if (!session) return null;
+
+    const metrics = this.getSessionMetrics(sessionId);
+
+    // Build timeline from actions/states/rewards
+    const timeline: any[] = [];
+    let cumulative = 0;
+    for (let i = 0; i < session.actions.length; i++) {
+      const action = session.actions[i];
+      const state = session.states[Math.min(i + 1, session.states.length - 1)];
+      const reward = session.rewards[i]?.totalReward ?? 0;
+      cumulative += reward;
+      const novelty = (() => { try { return this.computeNovelty(state); } catch { return null; } })();
+      timeline.push({
+        index: i + 1,
+        actionType: action.type,
+        success: action.success,
+        url: state?.url,
+        reward,
+        cumulativeReward: cumulative,
+        novelty
+      });
+    }
+
+    // Frontier snapshot (same-domain preferred)
+    const domain = session.states[session.states.length - 1]?.domain;
+    const snapshot = (this.frontier as any).snapshot?.() || [];
+    const frontier = snapshot.filter((e: any) => !domain || e.domain === domain).slice(0, 200);
+
+    return {
+      session: {
+        id: session.id,
+        startUrl: session.startUrl,
+        startTime: session.startTime,
+        duration: Date.now() - session.startTime.getTime(),
+        actions: session.actions.length,
+        pagesExplored: session.pagesExplored,
+        totalReward: session.totalReward,
+      },
+      metrics,
+      frontier,
+      timeline,
+    };
+  }
+
+  /**
+   * Compute detailed exploration metrics for API reporting
+   */
+  getSessionMetrics(sessionId: string): any {
+    const session = this.sessionsMap.get(sessionId);
+    if (!session) return null;
+
+    const uniquePages = new Set(session.states.map(s => this.normalizeUrl(s.url)));
+    const domains = new Set(session.states.map(s => s.domain));
+    const actionsTotal = session.actions.length || 1;
+    const successes = session.successfulActions || 0;
+    const failures = session.failedActions || 0;
+
+    const actionTypeCounts: Record<string, number> = {};
+    for (const a of session.actions) {
+      actionTypeCounts[a.type] = (actionTypeCounts[a.type] || 0) + 1;
+    }
+    // Shannon entropy over action type distribution
+    let entropy = 0;
+    const total = Object.values(actionTypeCounts).reduce((x, y) => x + y, 0) || 1;
+    for (const c of Object.values(actionTypeCounts)) {
+      const p = c / total;
+      entropy += p > 0 ? -p * Math.log2(p) : 0;
+    }
+
+    // Novelty average across recent states (post-observation proxy)
+    const recentStates = session.states.slice(-10);
+    const noveltyValues = recentStates.map(s => {
+      try { return this.noveltyEstimator.intrinsicReward(s); } catch { return 0; }
+    });
+    const noveltyAvg = noveltyValues.length ? (noveltyValues.reduce((a, b) => a + b, 0) / noveltyValues.length) : 0;
+
+    // Forms coverage across session
+    let formsCovered = 0;
+    const seenFormPages = new Set<string>();
+    for (const s of session.states) {
+      const key = this.normalizeUrl(s.url);
+      if (!seenFormPages.has(key) && (s.domSnapshot?.forms?.length || 0) > 0) {
+        formsCovered++;
+        seenFormPages.add(key);
+      }
+    }
+
+    // Element tag diversity (last state proxy)
+    const tagSet = new Set((session.states[session.states.length - 1]?.domSnapshot?.elements || []).map(e => e.tagName));
+
+    return {
+      coverage: {
+        pagesCovered: uniquePages.size,
+        domainsCovered: domains.size,
+        formsCovered,
+        uniqueElementTypes: tagSet.size,
+      },
+      efficiency: {
+        actionsPerPage: actionsTotal / Math.max(1, uniquePages.size),
+        successRate: successes / Math.max(1, (successes + failures)),
+        errorRate: failures / Math.max(1, (successes + failures)),
+        averageSessionDuration: Date.now() - session.startTime.getTime(),
+      },
+      learning: {
+        noveltyAvg,
+        explorationEntropy: entropy,
+        actionTypeCounts,
+      },
+      totals: {
+        actions: actionsTotal,
+        successes,
+        failures,
+        totalReward: session.totalReward,
+      }
     };
   }
 }

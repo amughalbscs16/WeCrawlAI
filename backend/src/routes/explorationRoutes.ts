@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import { explorationRLService } from '../services/ExplorationRLService';
+// (imported above)
 import { multiModalStateCaptureService } from '../services/StateCapture/MultiModalStateCaptureService';
 import { logger } from '../utils/logger';
 import {
@@ -14,6 +14,7 @@ import {
   SafetyConstraints
 } from '../types/exploration';
 import { WebSocketManager } from '../services/WebSocketManager';
+import { explorationRLService } from '../services/ExplorationRLService';
 
 const router = express.Router();
 
@@ -208,7 +209,10 @@ router.post('/:sessionId/auto', async (req, res): Promise<void> => {
     const {
       maxSteps = 50,
       maxDuration = 120000, // 2 minutes default
-      stopOnError = true
+      stopOnError = true,
+      backtrackEvery = 10,
+      noveltyStallMaxSteps = 6,
+      noveltyMinDelta = 0.02
     } = req.body;
 
     if (!sessionId) {
@@ -233,6 +237,14 @@ router.post('/:sessionId/auto', async (req, res): Promise<void> => {
     // Run exploration loop
     while (stepCount < maxSteps && (Date.now() - startTime) < maxDuration) {
       try {
+        // Periodic backtrack
+        if (backtrackEvery > 0 && stepCount > 0 && stepCount % backtrackEvery === 0) {
+          const target = (explorationRLService as any).requestBacktrack?.(sessionId);
+          if (target) {
+            logger.info('Auto backtrack scheduled', { sessionId, stepCount, target });
+          }
+        }
+
         const result = await explorationRLService.exploreStep(sessionId);
 
         const stepData = {
@@ -279,6 +291,30 @@ router.post('/:sessionId/auto', async (req, res): Promise<void> => {
           });
           break;
         }
+
+        // Optional stall detection: request backtrack if novelty stalls
+        try {
+          const m = explorationRLService.getSessionMetrics(sessionId);
+          const currNovelty = m?.learning?.noveltyAvg ?? 0;
+          if (typeof (req as any)._lastNovelty === 'number') {
+            const last = (req as any)._lastNovelty;
+            const delta = currNovelty - last;
+            (req as any)._stallSteps = (req as any)._stallSteps || 0;
+            if (delta < noveltyMinDelta) {
+              (req as any)._stallSteps++;
+            } else {
+              (req as any)._stallSteps = 0;
+            }
+            if ((req as any)._stallSteps >= noveltyStallMaxSteps) {
+              const target2 = (explorationRLService as any).requestBacktrack?.(sessionId);
+              if (target2) {
+                logger.info('Stall detected, auto backtrack scheduled', { sessionId, stepCount, target: target2 });
+              }
+              (req as any)._stallSteps = 0;
+            }
+          }
+          (req as any)._lastNovelty = currNovelty;
+        } catch {}
 
         // Small delay between steps
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -337,6 +373,81 @@ router.post('/:sessionId/auto', async (req, res): Promise<void> => {
 });
 
 /**
+ * GET /api/exploration/:sessionId/metrics
+ * Return exploration metrics snapshot
+ */
+router.get('/:sessionId/metrics', async (req, res): Promise<void> => {
+  try {
+    const { sessionId } = req.params;
+    if (!sessionId) {
+      res.status(400).json({ success: false, error: 'sessionId is required' });
+      return;
+    }
+
+    const metrics = explorationRLService.getSessionMetrics(sessionId);
+    if (!metrics) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    res.status(200).json({ success: true, data: metrics });
+  } catch (error: any) {
+    logger.error('Failed to get exploration metrics', { sessionId: req.params.sessionId, error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to get metrics', details: error.message });
+  }
+});
+
+/**
+ * GET /api/exploration/:sessionId/frontier
+ * Return frontier snapshot filtered for the session's domain
+ */
+router.get('/:sessionId/frontier', async (req, res): Promise<void> => {
+  try {
+    const { sessionId } = req.params;
+    const metrics = explorationRLService.getSessionStats(sessionId);
+    if (!metrics) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+    // Using internal method via service instance
+    const frontier = (explorationRLService as any).frontier?.snapshot?.() || [];
+    const currentUrl = metrics.currentUrl;
+    const domain = new URL(currentUrl).hostname;
+    const filtered = frontier.filter((e: any) => e.domain === domain);
+    res.status(200).json({ success: true, data: filtered });
+  } catch (error: any) {
+    logger.error('Failed to get frontier snapshot', { sessionId: req.params.sessionId, error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to get frontier', details: error.message });
+  }
+});
+
+/**
+ * POST /api/exploration/:sessionId/backtrack
+ * Optionally accepts { url } to request backtrack to a specific frontier URL
+ */
+router.post('/:sessionId/backtrack', async (req, res): Promise<void> => {
+  try {
+    const { sessionId } = req.params;
+    const { url } = req.body || {};
+    // Issue a NAVIGATE action directly via exploreStep path: we construct an immediate navigation
+    const sessionStats = explorationRLService.getSessionStats(sessionId);
+    if (!sessionStats) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+    const target = (explorationRLService as any).requestBacktrack?.(sessionId, url);
+    if (!target) {
+      res.status(200).json({ success: true, data: { message: 'No frontier candidate available' } });
+      return;
+    }
+    res.status(200).json({ success: true, data: { navigateTo: target } });
+  } catch (error: any) {
+    logger.error('Failed to backtrack', { sessionId: req.params.sessionId, error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to backtrack', details: error.message });
+  }
+});
+
+/**
  * GET /api/exploration/:sessionId/stats
  * Get exploration session statistics
  */
@@ -377,6 +488,53 @@ router.get('/:sessionId/stats', async (req, res): Promise<void> => {
       error: 'Failed to get exploration statistics',
       details: error.message
     });
+  }
+});
+
+/**
+ * GET /api/exploration/:sessionId/export
+ * Export session data (metrics, frontier, timeline) as JSON or CSV
+ * Query: format=json|csv (default json)
+ */
+router.get('/:sessionId/export', async (req, res): Promise<void> => {
+  try {
+    const { sessionId } = req.params;
+    const format = (req.query.format as string) || 'json';
+
+    const data = (explorationRLService as any).getSessionExport?.(sessionId);
+    if (!data) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    if (format === 'csv') {
+      const rows = [
+        ['index','actionType','success','url','reward','cumulativeReward','novelty']
+      ];
+      for (const t of data.timeline) {
+        rows.push([
+          t.index,
+          t.actionType,
+          t.success,
+          t.url || '',
+          t.reward ?? '',
+          t.cumulativeReward ?? '',
+          t.novelty ?? ''
+        ]);
+      }
+      const csv = rows.map(r => r.map(v => (typeof v === 'string' && v.includes(',') ? '"'+v.replace(/"/g,'""')+'"' : v)).join(',')).join('\n');
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="exploration_${sessionId}.csv"`);
+      res.send(csv);
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="exploration_${sessionId}.json"`);
+    res.send(JSON.stringify(data, null, 2));
+  } catch (error: any) {
+    logger.error('Failed to export session', { sessionId: req.params.sessionId, error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to export session', details: error.message });
   }
 });
 

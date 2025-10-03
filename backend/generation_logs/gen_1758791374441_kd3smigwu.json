@@ -1,0 +1,42 @@
+{
+  "id": "gen_1758791374441_kd3smigwu",
+  "timestamp": "2025-09-25T09:09:34.441Z",
+  "model": "gpt-3.5-turbo",
+  "scenario": {
+    "summary": "User Login Test",
+    "actions": [
+      "I want to log in to the application",
+      "Given I am on the login page",
+      "When I enter my username and password",
+      "And I click the login button",
+      "Then I should be logged in successfully",
+      "And I should see the dashboard"
+    ]
+  },
+  "input": {
+    "prompt": "Generate a test for the following scenario:\n\nSummary: User Login Test\n\nActions to perform:\n1. I want to log in to the application\n2. Given I am on the login page\n3. When I enter my username and password\n4. And I click the login button\n5. Then I should be logged in successfully\n6. And I should see the dashboard\n\nPlease generate:\n1. Complete test code that performs all the actions\n2. Add detailed comments and annotations\n3. Include proper setup and teardown\n4. Add error handling for each critical step\n5. Make it compatible with common testing frameworks (Jest/Mocha/Playwright)"
+  },
+  "output": {
+    "code": "```javascript\n// Import necessary libraries for the test\nconst { test, expect } = require('playwright');\n\n// Define the test suite\ndescribe('User Login Test', () => {\n    \n    let page;\n\n    // Setup before each test case\n    beforeEach(async () => {\n        // Launch the browser and navigate to the login page\n        browser = await browserType.launch();\n        context = await browser.newContext();\n        page = await context.newPage();\n        await page.goto('https://example.com/login');\n    });\n\n    // Teardown after each test case\n    afterEach(async () => {\n        // Close the browser after each test\n        await browser.close();\n    });\n\n    // Define the test case\n    test('User should be able to login successfully', async () => {\n        try {\n            // Enter username and password\n            await page.fill('input[name=username]', 'testuser');\n            await page.fill('input[name=password]', 'password123');\n\n            // Click the login button\n            await page.click('button[type=submit]');\n\n            // Wait for the dashboard to load\n            await page.waitForSelector('.dashboard');\n\n            // Verify successful login by checking for dashboard element\n            const dashboardElement = await page.isVisible('.dashboard');\n            expect(dashboardElement).toBeTruthy();\n        } catch (error) {\n            // Handle any errors that occur during the test\n            console.error('An error occurred: ', error);\n        }\n    });\n});\n```\n\nIn this test code:\n1. We import the necessary libraries for the test (Playwright in this case).\n2. We define a test suite using `describe` to group related test cases.\n3. We set up the browser and navigate to the login page before each test case using `beforeEach`.\n4. We close the browser after each test case using `afterEach`.\n5. We define a test case using `test` to perform the login actions and assertions.\n6. We handle any errors that occur during the test using `try-catch` block.\n7. We fill in the username and password fields, click the login button, wait for the dashboard to load, and verify successful login by checking for the dashboard element.\n8. If any error occurs during the test, it will be caught and logged to the console.",
+    "annotations": [
+      "Import necessary libraries for the test",
+      "Define the test suite",
+      "Setup before each test case",
+      "Launch the browser and navigate to the login page",
+      "Teardown after each test case",
+      "Close the browser after each test",
+      "Define the test case",
+      "Enter username and password",
+      "Click the login button",
+      "Wait for the dashboard to load",
+      "Verify successful login by checking for dashboard element",
+      "Handle any errors that occur during the test"
+    ],
+    "tokenInfo": {
+      "input": 226,
+      "output": 464,
+      "total": 690
+    },
+    "estimatedCost": "0.196900"
+  }
+}

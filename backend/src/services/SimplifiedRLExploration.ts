@@ -138,9 +138,12 @@ export class SimplifiedRLExploration {
     }
 
     // Update stuck counter based on action success and scroll limits
-    if (!action.success || session.consecutiveScrolls >= session.maxScrollsPerPage) {
+    // NOTE: Don't increment stuck counter just because action.success is false initially
+    // Actions are marked as false by default in selectNextAction, then updated in executeAction
+    if (action.type === 'scroll' && session.consecutiveScrolls >= session.maxScrollsPerPage) {
       session.stuckCounter++;
-    } else {
+    } else if (action.success) {
+      // Only decrement if action was explicitly successful
       session.stuckCounter = Math.max(0, session.stuckCounter - 1);
     }
     session.lastActionSuccess = action.success;
@@ -163,8 +166,8 @@ export class SimplifiedRLExploration {
       );
     }
 
-    // Check if we should end
-    const done = session.actions.length >= 100 || session.stuckCounter >= 5;
+    // Check if we should end (reduced from 100 to 50 for more focused exploration)
+    const done = session.actions.length >= 50 || session.stuckCounter >= 10;
 
     // Finalize report if exploration is done
     if (done && session.reportId) {
@@ -193,6 +196,18 @@ export class SimplifiedRLExploration {
     const startDomain = this.extractDomain(session.startUrl);
     const currentDomain = this.extractDomain(state.url);
 
+    // Log the current state for debugging
+    logger.info('🔍 Selecting next action', {
+      currentUrl: state.url,
+      normalizedUrl: currentUrl,
+      startUrl: session.startUrl,
+      startDomain,
+      currentDomain,
+      elementCount: state.elements.length,
+      stuckCounter: session.stuckCounter,
+      consecutiveScrolls: session.consecutiveScrolls
+    });
+
     // CRITICAL: Check if we're on a special URL (data:, about:blank, etc)
     // These URLs appear after going back from the initial page
     // We should navigate to the start URL to return to the actual page
@@ -217,12 +232,10 @@ export class SimplifiedRLExploration {
     }
 
     // Check if we've left the target domain
-    // Only go back if:
-    // 1. We have valid domains for both URLs
-    // 2. Current domain is different from start domain
-    // 3. It's not a subdomain of the target domain
+    // Only go back if we're on a completely different domain
     if (startDomain && currentDomain && currentDomain !== startDomain) {
-      // Allow subdomains of the same domain
+      // For Wikipedia, allow language subdomains (handled in extractDomain)
+      // For other sites, allow subdomains of the same domain
       const isSubdomain = currentDomain.endsWith('.' + startDomain) ||
                          startDomain.endsWith('.' + currentDomain);
 
@@ -245,12 +258,27 @@ export class SimplifiedRLExploration {
     const noElementsOnPage = state.elements.length === 0;
     const onlyScrolledRecently = session.consecutiveScrolls >= 2;
 
-    // Check if this is the start page - we should never leave it via back navigation
+    // Check if this is the start page or home page of the domain
     const isStartPage = this.normalizeUrl(state.url) === this.normalizeUrl(session.startUrl);
 
-    // If stuck on a real page with no elements or only scrolling, go back
-    // BUT: Never go back from the start page to avoid the data:, loop
-    if (!isStartPage && (noElementsOnPage || (onlyScrolledRecently && state.elements.length < 3))) {
+    // More comprehensive home page check - handles with/without www, trailing slash
+    const isHomePage = currentDomain && (
+      state.url === `https://${currentDomain}/` ||
+      state.url === `https://${currentDomain}` ||
+      state.url === `https://www.${currentDomain}/` ||
+      state.url === `https://www.${currentDomain}` ||
+      // Also check if current URL matches the start domain exactly
+      this.normalizeUrl(state.url) === `https://${currentDomain}/` ||
+      this.normalizeUrl(state.url) === `https://www.${currentDomain}/`
+    );
+
+    // CRITICAL: Never go back if we have plenty of elements to explore
+    // This prevents the agent from going back when it's on a page with content
+    const hasEnoughElements = state.elements.length > 5;
+
+    // Never go back from the start page or home page to avoid the data:, loop
+    // Only go back if we're on a dead-end page that's not the home/start AND doesn't have elements
+    if (!isStartPage && !isHomePage && !hasEnoughElements && (noElementsOnPage || (onlyScrolledRecently && state.elements.length < 3))) {
       logger.info('🔙 Dead-end detected, navigating back', {
         currentUrl,
         elementCount: state.elements.length,
@@ -265,7 +293,8 @@ export class SimplifiedRLExploration {
     }
 
     // If we're stuck (too many failures), try to navigate away
-    if (session.stuckCounter >= 3) {
+    // Increased threshold from 3 to 8 to give more chances before considering stuck
+    if (session.stuckCounter >= 8) {
       logger.info('Stuck detected, attempting recovery', {
         stuckCounter: session.stuckCounter,
         currentUrl
@@ -333,17 +362,32 @@ export class SimplifiedRLExploration {
           const startDomain = this.extractDomain(session.startUrl);
           const isExternalLink = linkDomain && startDomain && linkDomain !== startDomain;
 
-          // Heavily penalize external links (except for known subdomains)
+          // Heavily penalize external links
           if (isExternalLink) {
-            // Allow subdomains of the same domain
+            // For Wikipedia, still allow language subdomains (already handled in extractDomain)
             const isSubdomain = linkDomain.endsWith('.' + startDomain) || startDomain.endsWith('.' + linkDomain);
             if (!isSubdomain) {
-              score -= 100;
+              score -= 200; // Increased penalty for external links
               logger.debug('Penalizing external link', {
                 href: el.href,
                 linkDomain,
                 targetDomain: startDomain
               });
+            }
+          } else if (linkDomain === startDomain) {
+            // Boost internal links within the same domain
+            score += 10;
+
+            // For Wikipedia, prioritize article links
+            if (startDomain === 'wikipedia.org' && el.href) {
+              // Boost Wikipedia article links (usually /wiki/...)
+              if (el.href.includes('/wiki/') && !el.href.includes(':')) {
+                score += 15;
+              }
+              // Penalize special pages (User:, File:, Talk:, etc.)
+              if (el.href.match(/\/(User|File|Talk|Help|Wikipedia|Portal|Special|Template):/)) {
+                score -= 30;
+              }
             }
           }
 
@@ -837,7 +881,15 @@ export class SimplifiedRLExploration {
   private extractDomain(url: string): string | null {
     try {
       const urlObj = new URL(url);
-      return urlObj.hostname;
+      // For Wikipedia, treat all language subdomains as same domain
+      const hostname = urlObj.hostname;
+
+      // Handle Wikipedia specially - all *.wikipedia.org should be considered same domain
+      if (hostname.endsWith('.wikipedia.org')) {
+        return 'wikipedia.org';
+      }
+
+      return hostname;
     } catch {
       return null;
     }
@@ -918,6 +970,32 @@ export class SimplifiedRLExploration {
       clickedElementsOnCurrentPage: session.clickedElements.get(
         this.normalizeUrl(session.states[session.states.length - 1]?.url || '')
       )?.size || 0
+    };
+  }
+
+  getSessionExport(sessionId: string): any | null {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+
+    const timeline = session.actions.map((a, i) => ({
+      index: i + 1,
+      actionType: a.type,
+      success: a.success,
+      url: session.states[Math.min(i + 1, session.states.length - 1)]?.url,
+      elements: session.states[Math.min(i + 1, session.states.length - 1)]?.elements?.length || 0,
+    }));
+
+    const stats = this.getSessionStats(sessionId);
+
+    return {
+      session: {
+        id: session.id,
+        startUrl: session.startUrl,
+        actions: session.actions.length,
+        visitedUrls: session.visitedUrls.size,
+      },
+      stats,
+      timeline,
     };
   }
 }
